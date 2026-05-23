@@ -127,7 +127,8 @@ export default function App() {
 
       // 3. Cria o container "Fantasma" e esconde atrás de toda a tela
       const ghostContainer = document.createElement('div');
-      ghostContainer.style.position = 'fixed';
+      // absolute corrige o bug de tela branca ao rolar a página em celulares
+      ghostContainer.style.position = 'absolute';
       ghostContainer.style.top = '0';
       ghostContainer.style.left = '0';
       ghostContainer.style.zIndex = '-9999';
@@ -143,7 +144,12 @@ export default function App() {
         margin: 5,
         filename: `Orcamento_${cliente.nome.replace(/\s+/g, '_')}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          windowWidth: 900, // Força a largura de PC no celular para não cortar
+          scrollY: 0 // Força a captura no topo da página
+        },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
       };
 
