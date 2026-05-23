@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Truck, ShoppingCart, Printer, Search, Plus, Trash2, Edit3, Save, DollarSign, User, SearchX } from 'lucide-react';
+import { Truck, ShoppingCart, Printer, Search, Plus, Trash2, Edit3, Save, DollarSign, User, SearchX, Send, Share2 } from 'lucide-react';
 import './App.css';
 
 export default function App() {
@@ -73,6 +73,113 @@ export default function App() {
     setFormProduto({ codigo: '', descricao: '', fornecedor: '', custo: '', venda: '', un: '' });
   };
   const iniciarEdicao = (produto) => { setProdutoEditando(produto); setFormProduto(produto); };
+
+  const enviarWhatsApp = () => {
+    if (!cliente.celular) {
+      alert("Por favor, preencha o número do Celular do cliente para enviar o orçamento.");
+      return;
+    }
+
+    // Pega apenas os números do telefone digitado
+    const numero = cliente.celular.replace(/\D/g, '');
+    if (numero.length < 10) {
+      alert("Por favor, insira um número de celular válido com DDD (Ex: 84999999999).");
+      return;
+    }
+
+    let texto = `*ORÇAMENTO - JJ TECH SISTEMAS*\n\n`;
+    texto += `Olá, *${cliente.nome}*!\nSegue o resumo do seu orçamento:\n\n`;
+
+    carrinho.forEach(item => {
+      const unitLiquido = item.venda * (1 - (descontoPercentual / 100));
+      const totalLinha = item.qtd * unitLiquido;
+      texto += `▪ ${item.qtd}x ${item.descricao} - R$ ${formatarMoeda(totalLinha)}\n`;
+    });
+
+    texto += `\n*Subtotal:* R$ ${formatarMoeda(subtotalLiquido)}`;
+    if (valorFrete > 0) texto += `\n*Frete:* R$ ${formatarMoeda(valorFrete)}`;
+    if (valorDescontoGeral > 0) texto += `\n*Desconto:* R$ ${formatarMoeda(valorDescontoGeral)}`;
+    if (valorAcrescimoGeral > 0) texto += `\n*Acréscimo:* R$ ${formatarMoeda(valorAcrescimoGeral)}`;
+    texto += `\n\n*TOTAL:* *R$ ${formatarMoeda(totalLiquido)}*`;
+    texto += `\n\nValidade: ${formatarData(new Date(Date.now() + 86400000))}`;
+
+    const url = `https://api.whatsapp.com/send?phone=55${numero}&text=${encodeURIComponent(texto)}`;
+    window.open(url, '_blank');
+  };
+
+  const compartilharPDF = async () => {
+    if (!cliente.celular) {
+      alert("Por favor, preencha o número do Celular do cliente para gerar o arquivo.");
+      return;
+    }
+
+    const gerar = async () => {
+      const elementoOriginal = document.getElementById('orcamento-pdf');
+
+      // 1. Cria um clone exato do orçamento
+      const clone = elementoOriginal.cloneNode(true);
+
+      // 2. Garante que o clone fique com design de folha A4 branca
+      clone.style.display = 'block';
+      clone.style.width = '794px';
+      clone.style.backgroundColor = '#ffffff';
+      clone.style.padding = '20px';
+
+      // 3. Cria o container "Fantasma" e esconde atrás de toda a tela
+      const ghostContainer = document.createElement('div');
+      ghostContainer.style.position = 'fixed';
+      ghostContainer.style.top = '0';
+      ghostContainer.style.left = '0';
+      ghostContainer.style.zIndex = '-9999';
+      ghostContainer.style.pointerEvents = 'none';
+
+      ghostContainer.appendChild(clone);
+      document.body.appendChild(ghostContainer);
+
+      // 4. Aguardamos 300ms (tempo pro navegador ser obrigado a carregar todos os textos no fantasma)
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const opt = {
+        margin: 5,
+        filename: `Orcamento_${cliente.nome.replace(/\s+/g, '_')}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      try {
+        const pdfBlob = await window.html2pdf().set(opt).from(clone).output('blob');
+        const file = new File([pdfBlob], opt.filename, { type: 'application/pdf' });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: 'Orçamento JJ Tech',
+            text: `Olá ${cliente.nome}, segue o seu orçamento em anexo.`,
+            files: [file]
+          });
+        } else {
+          alert("O compartilhamento nativo não é suportado no seu dispositivo. O arquivo será baixado.");
+          await window.html2pdf().set(opt).from(clone).save();
+        }
+      } catch (error) {
+        console.error("Erro ao gerar PDF:", error);
+        alert("Erro ao processar o arquivo PDF.");
+      } finally {
+        // Remove o fantasma de trás da tela para não gastar memória
+        document.body.removeChild(ghostContainer);
+      }
+    };
+
+    // Carrega a biblioteca de conversão de PDF apenas quando necessário
+    if (!window.html2pdf) {
+      const script = document.createElement('script');
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+      script.onload = gerar;
+      document.body.appendChild(script);
+    } else {
+      gerar();
+    }
+  };
 
   const hoje = new Date();
   const amanha = new Date(hoje);
@@ -194,9 +301,17 @@ export default function App() {
                 <span>Total Estimado:</span>
                 <h2>R$ {formatarMoeda(totalLiquido)}</h2>
               </div>
-              <button className="btn-print-huge" onClick={() => window.print()} disabled={carrinho.length === 0}>
-                <Printer size={24} /> IMPRIMIR ORÇAMENTO
-              </button>
+              <div className="cart-actions">
+                <button className="btn-print-huge" onClick={() => window.print()} disabled={carrinho.length === 0} title="Imprimir ou Salvar PDF">
+                  <Printer size={20} /> IMPRIMIR
+                </button>
+                <button className="btn-whatsapp" onClick={enviarWhatsApp} disabled={carrinho.length === 0} title="Enviar resumo por WhatsApp">
+                  <Send size={20} /> WHATSAPP
+                </button>
+                <button className="btn-share" onClick={compartilharPDF} disabled={carrinho.length === 0} title="Gerar PDF e Compartilhar">
+                  <Share2 size={20} /> PDF
+                </button>
+              </div>
             </div>
           </div>
         </div>
